@@ -5,7 +5,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 import json
 from core.reviewer import CodeReviewer
-from core.rubric import BUILTIN_RUBRICS, DEFAULT_PYTHON_RUBRIC, Rubric, RubricCriterion
+from core.rubric import BUILTIN_RUBRICS, Rubric, RubricCriterion
+from backend.models import init_db, SessionLocal, Submission
 
 # --- Page config ---
 st.set_page_config(
@@ -14,6 +15,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Init DB
+init_db()
 
 # --- Custom CSS ---
 st.markdown("""
@@ -25,6 +29,7 @@ st.markdown("""
     font-size: 48px;
     font-weight: bold;
     text-align: center;
+    margin-bottom: 12px;
 }
 .grade-A { background: #EAF3DE; color: #27500A; }
 .grade-B { background: #E6F1FB; color: #0C447C; }
@@ -35,14 +40,20 @@ st.markdown("""
 .comment-warning { border-left: 4px solid #EF9F27; padding: 6px 12px; margin: 4px 0; background: #FAEEDA; border-radius: 0 6px 6px 0; }
 .comment-suggestion { border-left: 4px solid #378ADD; padding: 6px 12px; margin: 4px 0; background: #E6F1FB; border-radius: 0 6px 6px 0; }
 .comment-praise  { border-left: 4px solid #1D9E75; padding: 6px 12px; margin: 4px 0; background: #E1F5EE; border-radius: 0 6px 6px 0; }
+.history-card { background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
 
 # --- Sidebar ---
 with st.sidebar:
-    st.title("⚙️ Configuration")
+    st.title("🔍 CodeReview AI")
+    st.caption("AI-powered code reviewer for CS educators")
+    st.divider()
 
+    page = st.radio("Navigate", ["📝 Review", "📚 History"], index=0, label_visibility="collapsed")
+
+    st.divider()
     api_key = st.text_input(
         "Groq API Key",
         type="password",
@@ -51,7 +62,6 @@ with st.sidebar:
     )
 
     st.divider()
-
     st.subheader("Rubric")
     rubric_choice = st.radio(
         "Choose rubric",
@@ -67,7 +77,7 @@ with st.sidebar:
         rubric = BUILTIN_RUBRICS["Data Science / ML Assignment"]
         st.caption("Correctness 35% · Methodology 30% · Quality 20% · Analysis 15%")
     else:
-        st.caption("Define custom weights below (must sum to 100%)")
+        st.caption("Weights must sum to 100%")
         c1 = st.slider("Correctness %", 0, 100, 40, 5)
         c2 = st.slider("Code Style %", 0, 100, 20, 5)
         c3 = st.slider("Efficiency %", 0, 100, 20, 5)
@@ -87,132 +97,212 @@ with st.sidebar:
             )
 
     st.divider()
-    st.subheader("Language")
     language = st.selectbox("Language", ["python", "javascript", "java"], index=0)
 
     st.divider()
-    st.markdown("Built for **EdTech 3.0 Hackathon**\nTrack 2 · Assessment & Feedback")
+    st.caption("Built for EdTech 3.0 Hackathon · Track 2")
 
 
-# --- Main area ---
-st.title("🔍 CodeReview AI")
-st.caption("AI-powered code assignment reviewer for CS educators")
+# =====================
+# PAGE: REVIEW
+# =====================
+if "Review" in page:
+    st.title("📝 Review Code")
 
-col1, col2 = st.columns([1, 1], gap="large")
+    col1, col2 = st.columns([1, 1], gap="large")
 
-with col1:
-    st.subheader("📋 Assignment")
-    assignment_title = st.text_input("Assignment title", placeholder="e.g. Bubble Sort Implementation")
-    assignment_prompt = st.text_area(
-        "Assignment prompt",
-        placeholder="Describe what the student was asked to do...",
-        height=120,
-    )
+    with col1:
+        assignment_title = st.text_input("Assignment title", placeholder="e.g. Bubble Sort Implementation")
+        assignment_prompt = st.text_area(
+            "Assignment prompt",
+            placeholder="Describe what the student was asked to do...",
+            height=120,
+        )
+        st.markdown("**Student Code**")
+        code = st.text_area(
+            "code",
+            placeholder="def bubble_sort(arr):\n    ...",
+            height=300,
+            label_visibility="collapsed",
+        )
+        submitted = st.button("🚀 Review Code", type="primary", use_container_width=True)
 
-    st.subheader("💻 Student Code")
-    code = st.text_area(
-        "Paste student code here",
-        placeholder="def bubble_sort(arr):\n    ...",
-        height=300,
-        label_visibility="collapsed",
-    )
+    with col2:
+        st.subheader("📊 Feedback")
 
-    submitted = st.button("🚀 Review Code", type="primary", use_container_width=True)
-
-
-with col2:
-    st.subheader("📊 Feedback")
-
-    if submitted:
-        if not api_key:
-            st.error("Please enter your Groq API key in the sidebar.")
-        elif not code.strip():
-            st.error("Please paste some code to review.")
-        elif not assignment_prompt.strip():
-            st.error("Please enter the assignment prompt.")
-        elif rubric is None:
-            st.error("Custom rubric weights must sum to 100%.")
-        else:
-            with st.spinner("Analyzing code..."):
-                try:
-                    reviewer = CodeReviewer(api_key=api_key)
-                    result = reviewer.review(
-                        code=code,
-                        assignment_prompt=assignment_prompt,
-                        rubric=rubric,
-                        language=language,
-                    )
-                except Exception as e:
-                    st.error(f"Error: {e}")
-                    result = None
-
-            if result and result.success:
-                # Score + grade
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Overall Score", f"{result.overall_score:.1f}/100")
-                m2.metric("Grade", result.grade_letter)
-                sa = result.static_analysis
-                m3.metric("Static Issues", len(sa.issues) if sa else 0)
-
-                # Grade badge
-                grade_class = f"grade-{result.grade_letter[0]}"
-                st.markdown(
-                    f'<div class="grade-badge {grade_class}">{result.grade_letter}</div>',
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(f"**Summary:** {result.summary}")
-
-                st.divider()
-
-                # Rubric breakdown
-                st.subheader("📐 Rubric Breakdown")
-                for cs in result.criteria_scores:
-                    pct = (cs.score / 10) * 100
-                    st.markdown(f"**{cs.name}** ({int(cs.weight*100)}%) — {cs.score:.1f}/10")
-                    st.progress(pct / 100)
-                    st.caption(cs.feedback)
-
-                st.divider()
-
-                # Line comments
-                if result.line_comments:
-                    st.subheader("📍 Line Comments")
-                    for lc in result.line_comments:
-                        css_class = f"comment-{lc.type}"
-                        icon = {"error": "🔴", "warning": "🟡", "suggestion": "🔵", "praise": "🟢"}.get(lc.type, "⚪")
-                        st.markdown(
-                            f'<div class="{css_class}">{icon} <strong>Line {lc.line}</strong> — {lc.comment}</div>',
-                            unsafe_allow_html=True,
+        if submitted:
+            if not api_key:
+                st.error("Please enter your Groq API key in the sidebar.")
+            elif not code.strip():
+                st.error("Please paste some code to review.")
+            elif not assignment_prompt.strip():
+                st.error("Please enter the assignment prompt.")
+            elif rubric is None:
+                st.error("Custom rubric weights must sum to 100%.")
+            else:
+                with st.spinner("Analyzing code... this takes ~10 seconds"):
+                    try:
+                        reviewer = CodeReviewer(api_key=api_key)
+                        result = reviewer.review(
+                            code=code,
+                            assignment_prompt=assignment_prompt,
+                            rubric=rubric,
+                            language=language,
                         )
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                        result = None
 
-                st.divider()
+                if result and result.success:
+                    # Save to DB
+                    try:
+                        db = SessionLocal()
+                        sub = Submission(
+                            assignment_title=assignment_title or "Untitled",
+                            language=language,
+                            code=code,
+                            assignment_prompt=assignment_prompt,
+                            rubric_json=rubric.to_json(),
+                            feedback_json=json.dumps(result.raw_json),
+                            overall_score=result.overall_score,
+                        )
+                        db.add(sub)
+                        db.commit()
+                        db.close()
+                    except Exception:
+                        pass
 
-                # Strengths & improvements
-                scol, icol = st.columns(2)
-                with scol:
-                    st.subheader("✅ Strengths")
-                    for s in result.strengths:
-                        st.markdown(f"- {s}")
-                with icol:
-                    st.subheader("🔧 Improvements")
-                    for i in result.improvements:
-                        st.markdown(f"- {i}")
+                    # Metrics
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Overall Score", f"{result.overall_score:.1f}/100")
+                    m2.metric("Grade", result.grade_letter)
+                    sa = result.static_analysis
+                    m3.metric("Static Issues", len(sa.issues) if sa else 0)
 
-            elif result:
-                st.error(f"Review failed: {result.error}")
+                    grade_class = f"grade-{result.grade_letter[0]}"
+                    st.markdown(
+                        f'<div class="grade-badge {grade_class}">{result.grade_letter}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(f"**Summary:** {result.summary}")
+                    st.divider()
 
-    else:
-        st.info("Fill in the assignment details and paste the student's code, then click **Review Code**.")
+                    # Rubric breakdown
+                    st.subheader("📐 Rubric Breakdown")
+                    for cs in result.criteria_scores:
+                        st.markdown(f"**{cs.name}** ({int(cs.weight*100)}%) — {cs.score:.1f}/10")
+                        st.progress(cs.score / 10)
+                        st.caption(cs.feedback)
 
-        # Show example
-        with st.expander("See an example"):
-            st.markdown("**Assignment:** Implement bubble sort")
-            st.code('''def bubble_sort(arr):
+                    st.divider()
+
+                    # Line comments
+                    if result.line_comments:
+                        st.subheader("📍 Line Comments")
+                        for lc in result.line_comments:
+                            css_class = f"comment-{lc.type}"
+                            icon = {"error": "🔴", "warning": "🟡", "suggestion": "🔵", "praise": "🟢"}.get(lc.type, "⚪")
+                            st.markdown(
+                                f'<div class="{css_class}">{icon} <strong>Line {lc.line}</strong> — {lc.comment}</div>',
+                                unsafe_allow_html=True,
+                            )
+                        st.divider()
+
+                    # Strengths & improvements
+                    scol, icol = st.columns(2)
+                    with scol:
+                        st.subheader("✅ Strengths")
+                        for s in result.strengths:
+                            st.markdown(f"- {s}")
+                    with icol:
+                        st.subheader("🔧 Improvements")
+                        for i in result.improvements:
+                            st.markdown(f"- {i}")
+
+                    # Export
+                    st.divider()
+                    export_data = {
+                        "assignment": assignment_title,
+                        "score": result.overall_score,
+                        "grade": result.grade_letter,
+                        "summary": result.summary,
+                        "criteria": [{"name": cs.name, "score": cs.score, "feedback": cs.feedback} for cs in result.criteria_scores],
+                        "strengths": result.strengths,
+                        "improvements": result.improvements,
+                    }
+                    st.download_button(
+                        "⬇️ Export Feedback as JSON",
+                        data=json.dumps(export_data, indent=2),
+                        file_name=f"feedback_{assignment_title or 'review'}.json",
+                        mime="application/json",
+                    )
+
+                elif result:
+                    st.error(f"Review failed: {result.error}")
+
+        else:
+            st.info("Fill in the assignment details and paste the student's code, then click **Review Code**.")
+            with st.expander("See an example"):
+                st.markdown("**Assignment:** Implement bubble sort")
+                st.code('''def bubble_sort(arr):
     n = len(arr)
     for i in range(n):
         for j in range(0, n-i-1):
             if arr[j] > arr[j+1]:
                 arr[j], arr[j+1] = arr[j+1], arr[j]
     return arr''', language="python")
-            st.markdown("→ CodeReview AI will score this against correctness, style, efficiency, and documentation.")
+
+
+# =====================
+# PAGE: HISTORY
+# =====================
+elif "History" in page:
+    st.title("📚 Submission History")
+    st.caption("All past reviews saved locally")
+
+    try:
+        db = SessionLocal()
+        submissions = db.query(Submission).order_by(Submission.submitted_at.desc()).limit(50).all()
+        db.close()
+    except Exception as e:
+        st.error(f"Could not load history: {e}")
+        submissions = []
+
+    if not submissions:
+        st.info("No submissions yet. Go to the Review page to get started.")
+    else:
+        # Summary stats
+        scores = [s.overall_score for s in submissions if s.overall_score]
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Total Reviews", len(submissions))
+        s2.metric("Average Score", f"{sum(scores)/len(scores):.1f}" if scores else "—")
+        s3.metric("Highest Score", f"{max(scores):.1f}" if scores else "—")
+
+        st.divider()
+
+        for sub in submissions:
+            grade = "?"
+            if sub.overall_score:
+                if sub.overall_score >= 90: grade = "A"
+                elif sub.overall_score >= 80: grade = "B"
+                elif sub.overall_score >= 70: grade = "C"
+                elif sub.overall_score >= 60: grade = "D"
+                else: grade = "F"
+
+            with st.expander(f"{'🟢' if sub.overall_score >= 70 else '🔴'} {sub.assignment_title} — {sub.overall_score:.1f}/100 · {sub.submitted_at.strftime('%d %b %Y, %H:%M')}"):
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    st.markdown(f"**Language:** {sub.language}")
+                    st.markdown(f"**Assignment:** {sub.assignment_prompt[:200]}...")
+                    if sub.feedback_json:
+                        feedback = json.loads(sub.feedback_json)
+                        st.markdown(f"**Summary:** {feedback.get('summary', '')}")
+                with c2:
+                    grade_class = f"grade-{grade}"
+                    st.markdown(
+                        f'<div class="grade-badge {grade_class}" style="font-size:32px;padding:6px 18px;">{grade}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.metric("Score", f"{sub.overall_score:.1f}/100")
+
+                st.code(sub.code[:500] + ("..." if len(sub.code) > 500 else ""), language=sub.language)

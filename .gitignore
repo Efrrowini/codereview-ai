@@ -22,3 +22,4 @@ data/*.sqlite
 dist/
 build/
 test_review.py
+.streamlit/secrets.toml
