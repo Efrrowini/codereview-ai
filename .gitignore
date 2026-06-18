@@ -1,0 +1,24 @@
+# Environment
+.env
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+
+# Data & DB
+data/*.db
+data/*.sqlite
+
+# IDE
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Misc
+.DS_Store
+*.egg-info/
+dist/
+build/
+test_review.py
