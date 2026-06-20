@@ -9,6 +9,7 @@ import csv
 import io
 from core.reviewer import CodeReviewer
 from core.rubric import BUILTIN_RUBRICS, Rubric, RubricCriterion
+from core.followup import generate_followup
 from backend.models import init_db, SessionLocal, Submission
 
 st.set_page_config(
@@ -199,6 +200,31 @@ if "Review" in page and "Batch" not in page:
                         data=json.dumps(export_data, indent=2),
                         file_name=f"feedback_{assignment_title or 'review'}.json",
                         mime="application/json")
+
+                    # Adaptive follow-up exercise
+                    st.divider()
+                    st.subheader("🎯 Adaptive Follow-up Exercise")
+                    st.caption("Personalised next step based on this student's weakest area")
+                    with st.spinner("Generating personalised exercise..."):
+                        followup = generate_followup(
+                            review_result=result,
+                            code=code,
+                            assignment_prompt=assignment_prompt,
+                            api_key=api_key,
+                        )
+                    if followup.success:
+                        weak_score = min(result.criteria_scores, key=lambda c: c.score) if result.criteria_scores else None
+                        st.markdown(f"**Targeting weak area:** {followup.weak_criterion} "
+                                    f"({weak_score.score:.1f}/10)" if weak_score else f"**Targeting:** {followup.weak_criterion}")
+                        st.markdown(f"### {followup.exercise_title}")
+                        st.info(followup.exercise)
+                        with st.expander("💡 Hint"):
+                            st.markdown(followup.hint)
+                        if followup.expected_skills:
+                            st.markdown("**Skills practised:** " + " · ".join(f"`{s}`" for s in followup.expected_skills))
+                    else:
+                        st.warning(f"Could not generate follow-up: {followup.error}")
+
                 elif result:
                     st.error(f"Review failed: {result.error}")
         else:
