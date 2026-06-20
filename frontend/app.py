@@ -24,16 +24,37 @@ init_db()
 
 st.markdown("""
 <style>
-.grade-badge { display:inline-block;padding:8px 24px;border-radius:8px;font-size:48px;font-weight:bold;text-align:center;margin-bottom:12px; }
-.grade-A { background:#EAF3DE;color:#27500A; }
-.grade-B { background:#E6F1FB;color:#0C447C; }
-.grade-C { background:#FAEEDA;color:#633806; }
-.grade-D { background:#FAECE7;color:#712B13; }
-.grade-F { background:#FCEBEB;color:#791F1F; }
-.comment-error      { border-left:4px solid #E24B4A;padding:6px 12px;margin:4px 0;background:#FCEBEB;border-radius:0 6px 6px 0; }
-.comment-warning    { border-left:4px solid #EF9F27;padding:6px 12px;margin:4px 0;background:#FAEEDA;border-radius:0 6px 6px 0; }
-.comment-suggestion { border-left:4px solid #378ADD;padding:6px 12px;margin:4px 0;background:#E6F1FB;border-radius:0 6px 6px 0; }
-.comment-praise     { border-left:4px solid #1D9E75;padding:6px 12px;margin:4px 0;background:#E1F5EE;border-radius:0 6px 6px 0; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+section[data-testid="stSidebar"] { background: #0D1117; border-right: 1px solid #21262D; }
+.page-header { background: #161B22; border: 1px solid #21262D; border-left: 3px solid #00D084; border-radius: 0 10px 10px 0; padding: 20px 24px; margin-bottom: 24px; }
+.page-header h1 { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 600; color: #E6EDF3; margin: 0 0 4px; letter-spacing: -0.3px; }
+.page-header p { font-size: 13px; color: #8B949E; margin: 0; }
+.grade-badge { display:inline-flex; align-items:center; justify-content:center; width:72px; height:72px; border-radius:12px; font-family:'JetBrains Mono',monospace; font-size:36px; font-weight:700; margin-bottom:16px; border:2px solid; }
+.grade-A { background:#0D2818; color:#00D084; border-color:#00D084; }
+.grade-B { background:#0D1A2E; color:#00A3FF; border-color:#00A3FF; }
+.grade-C { background:#2E1F0D; color:#F0A83A; border-color:#F0A83A; }
+.grade-D { background:#2E150D; color:#FF7B54; border-color:#FF7B54; }
+.grade-F { background:#2E0D0D; color:#F85149; border-color:#F85149; }
+.comment-error      { border-left:3px solid #F85149; padding:8px 14px; margin:6px 0; background:#1C0F0F; border-radius:0 8px 8px 0; font-size:13px; }
+.comment-warning    { border-left:3px solid #F0A83A; padding:8px 14px; margin:6px 0; background:#1C150A; border-radius:0 8px 8px 0; font-size:13px; }
+.comment-suggestion { border-left:3px solid #00A3FF; padding:8px 14px; margin:6px 0; background:#0A1520; border-radius:0 8px 8px 0; font-size:13px; }
+.comment-praise     { border-left:3px solid #00D084; padding:8px 14px; margin:6px 0; background:#0A1C14; border-radius:0 8px 8px 0; font-size:13px; }
+.lb-row { display:flex; align-items:center; gap:14px; padding:10px 16px; background:#161B22; border:1px solid #21262D; border-radius:8px; margin-bottom:8px; }
+.lb-rank { font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B949E; min-width:28px; }
+.lb-name { font-weight:500; color:#E6EDF3; flex:1; font-size:14px; }
+.lb-score { font-family:'JetBrains Mono',monospace; font-size:14px; color:#00D084; }
+.followup-card { background:linear-gradient(135deg,#0D1A2E,#0D2818); border:1px solid #00D084; border-radius:10px; padding:20px; margin-top:8px; }
+.followup-card h3 { color:#00D084; font-family:'JetBrains Mono',monospace; font-size:16px; margin:0 0 10px; }
+.followup-card p { color:#C9D1D9; font-size:13px; line-height:1.6; margin:0; }
+hr { border-color: #21262D !important; }
+div[data-testid="metric-container"] { background:#161B22; border:1px solid #21262D; border-radius:10px; padding:14px 18px; }
+div[data-testid="metric-container"] label { color:#8B949E !important; font-size:11px !important; text-transform:uppercase; letter-spacing:.05em; }
+div[data-testid="metric-container"] div[data-testid="metric-value"] { font-family:'JetBrains Mono',monospace; color:#E6EDF3 !important; }
+.stButton > button[kind="primary"] { background:#00D084 !important; color:#0D1117 !important; border:none !important; font-weight:600 !important; border-radius:8px !important; }
+.stButton > button[kind="primary"]:hover { background:#00B872 !important; }
+.stTextInput input, .stTextArea textarea { background:#161B22 !important; border:1px solid #21262D !important; border-radius:8px !important; color:#E6EDF3 !important; }
+.stTextInput input:focus, .stTextArea textarea:focus { border-color:#00D084 !important; box-shadow:0 0 0 2px rgba(0,208,132,0.15) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -70,8 +91,7 @@ def get_api_key():
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("🔍 CodeReview AI")
-    st.caption("AI-powered code reviewer for CS educators")
+    st.markdown('''<div style="padding:12px 0 8px;"><span style="font-family:JetBrains Mono,monospace;font-size:16px;font-weight:600;color:#E6EDF3;">⟩ CodeReview</span><span style="font-family:JetBrains Mono,monospace;font-size:16px;font-weight:600;color:#00D084;">AI</span></div><div style="font-size:11px;color:#8B949E;margin-bottom:8px;">AI code reviewer for CS educators</div>''', unsafe_allow_html=True)
     st.divider()
 
     page = st.radio("Navigate", ["📝 Review", "📦 Batch Review", "📚 History", "📈 Progress", "🏫 Dashboard"], index=0, label_visibility="collapsed")
@@ -119,7 +139,7 @@ with st.sidebar:
 # PAGE: SINGLE REVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 if "Review" in page and "Batch" not in page:
-    st.title("📝 Review Code")
+    st.markdown('''<div class="page-header"><h1>Review Code</h1><p>Paste student code, select a rubric, get AI feedback in seconds</p></div>''', unsafe_allow_html=True)
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
@@ -201,13 +221,19 @@ if "Review" in page and "Batch" not in page:
                         followup = generate_followup(result, code, assignment_prompt, api_key)
                     if followup.success:
                         weak_score = min(result.criteria_scores, key=lambda c: c.score) if result.criteria_scores else None
-                        st.markdown(f"**Targeting weak area:** {followup.weak_criterion} ({weak_score.score:.1f}/10)" if weak_score else f"**Targeting:** {followup.weak_criterion}")
-                        st.markdown(f"### {followup.exercise_title}")
-                        st.info(followup.exercise)
+                        weak_label = f"{followup.weak_criterion} — {weak_score.score:.1f}/10" if weak_score else followup.weak_criterion
+                        skills_html = " &nbsp;·&nbsp; ".join(f'<code style="background:#0D2818;color:#00D084;padding:2px 8px;border-radius:4px;font-size:11px;">{s}</code>' for s in followup.expected_skills)
+                        st.markdown(f'''
+<div class="followup-card">
+  <div style="font-size:11px;color:#8B949E;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">🎯 Adaptive Follow-up · Targeting: {weak_label}</div>
+  <h3>{followup.exercise_title}</h3>
+  <p>{followup.exercise}</p>
+  <div style="margin-top:14px;padding-top:14px;border-top:1px solid #1B3A2A;">
+    <span style="font-size:11px;color:#8B949E;">Skills practised: </span>{skills_html}
+  </div>
+</div>''', unsafe_allow_html=True)
                         with st.expander("💡 Hint"):
                             st.markdown(followup.hint)
-                        if followup.expected_skills:
-                            st.markdown("**Skills practised:** " + " · ".join(f"`{s}`" for s in followup.expected_skills))
                     else:
                         st.warning(f"Could not generate follow-up: {followup.error}")
 
@@ -230,8 +256,7 @@ if "Review" in page and "Batch" not in page:
 # PAGE: BATCH REVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Batch" in page:
-    st.title("📦 Batch Review")
-    st.markdown("Upload a CSV of student submissions — get all of them reviewed at once.")
+    st.markdown('''<div class="page-header"><h1>Batch Review</h1><p>Upload a CSV — review an entire class in minutes</p></div>''', unsafe_allow_html=True)
 
     with st.expander("📋 CSV format guide"):
         st.markdown("Your CSV must have these columns:")
@@ -304,6 +329,46 @@ elif "Batch" in page:
                                 st.markdown("**🔧 Improvements**")
                                 for i in r["improvements"]: st.markdown(f"- {i}")
 
+                    # ── Plagiarism similarity check ──────────────────────
+                    st.divider()
+                    st.markdown('''<div class="page-header"><h1>🔍 Similarity Check</h1><p>Flagging suspiciously similar submissions using cosine similarity</p></div>''', unsafe_allow_html=True)
+
+                    from sklearn.feature_extraction.text import TfidfVectorizer
+                    from sklearn.metrics.pairwise import cosine_similarity
+                    import numpy as np
+
+                    codes = [s.get("code", "") for s in students]
+                    names = [s.get("student_name", f"Student {i+1}") for i, s in enumerate(students)]
+
+                    try:
+                        vectorizer = TfidfVectorizer(analyzer="char", ngram_range=(3, 5))
+                        tfidf_matrix = vectorizer.fit_transform(codes)
+                        sim_matrix = cosine_similarity(tfidf_matrix)
+
+                        THRESHOLD = 0.75
+                        flagged_pairs = []
+                        for i in range(len(names)):
+                            for j in range(i+1, len(names)):
+                                sim = sim_matrix[i][j]
+                                if sim >= THRESHOLD:
+                                    flagged_pairs.append((names[i], names[j], sim))
+
+                        if flagged_pairs:
+                            st.warning(f"⚠️ {len(flagged_pairs)} suspicious pair(s) detected above {int(THRESHOLD*100)}% similarity threshold.")
+                            for a, b, sim in sorted(flagged_pairs, key=lambda x: x[2], reverse=True):
+                                sim_pct = int(sim * 100)
+                                color = "#F85149" if sim_pct >= 90 else "#F0A83A"
+                                st.markdown(f'''<div style="background:#161B22;border:1px solid {color};border-left:4px solid {color};border-radius:8px;padding:12px 16px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="color:#E6EDF3;font-size:14px;">⚠️ <strong>{a}</strong> &nbsp;↔&nbsp; <strong>{b}</strong></span>
+                                    <span style="font-family:JetBrains Mono,monospace;color:{color};font-size:14px;font-weight:600;">{sim_pct}% similar</span>
+                                </div>''', unsafe_allow_html=True)
+                        else:
+                            st.success("✅ No suspicious similarities detected above 75% threshold.")
+
+                    except Exception as e:
+                        st.info(f"Similarity check skipped: install scikit-learn to enable this feature.")
+
+                    st.divider()
                     csv_out = io.StringIO()
                     writer  = csv.writer(csv_out)
                     writer.writerow(["Student", "Score", "Grade", "Summary"])
@@ -322,8 +387,7 @@ elif "Batch" in page:
 # PAGE: HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
 elif "History" in page:
-    st.title("📚 Submission History")
-    st.caption("All past reviews saved locally")
+    st.markdown('''<div class="page-header"><h1>Submission History</h1><p>All past reviews — searchable, expandable, exportable</p></div>''', unsafe_allow_html=True)
     try:
         db = SessionLocal()
         submissions = db.query(Submission).order_by(Submission.submitted_at.desc()).limit(50).all()
@@ -362,8 +426,7 @@ elif "History" in page:
 # PAGE: PROGRESS TRACKER
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Progress" in page:
-    st.title("📈 Student Progress Tracker")
-    st.caption("Track how individual students improve over time")
+    st.markdown('''<div class="page-header"><h1>Student Progress</h1><p>Track how individual students improve across assignments</p></div>''', unsafe_allow_html=True)
 
     try:
         db = SessionLocal()
@@ -482,8 +545,7 @@ elif "Progress" in page:
 # PAGE: CLASS DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Dashboard" in page:
-    st.title("🏫 Class Dashboard")
-    st.caption("Aggregated insights across all student submissions")
+    st.markdown('''<div class="page-header"><h1>Class Dashboard</h1><p>Grade distribution, common weaknesses, and class-wide trends</p></div>''', unsafe_allow_html=True)
 
     try:
         db = SessionLocal()

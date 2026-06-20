@@ -3,3 +3,4 @@ pylint
 sqlalchemy
 streamlit
 python-dotenv
+scikit-learn
