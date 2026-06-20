@@ -23,31 +23,20 @@ init_db()
 
 st.markdown("""
 <style>
-.grade-badge {
-    display: inline-block;
-    padding: 8px 24px;
-    border-radius: 8px;
-    font-size: 48px;
-    font-weight: bold;
-    text-align: center;
-    margin-bottom: 12px;
-}
-.grade-A { background: #EAF3DE; color: #27500A; }
-.grade-B { background: #E6F1FB; color: #0C447C; }
-.grade-C { background: #FAEEDA; color: #633806; }
-.grade-D { background: #FAECE7; color: #712B13; }
-.grade-F { background: #FCEBEB; color: #791F1F; }
-.comment-error      { border-left: 4px solid #E24B4A; padding: 6px 12px; margin: 4px 0; background: #FCEBEB; border-radius: 0 6px 6px 0; }
-.comment-warning    { border-left: 4px solid #EF9F27; padding: 6px 12px; margin: 4px 0; background: #FAEEDA; border-radius: 0 6px 6px 0; }
-.comment-suggestion { border-left: 4px solid #378ADD; padding: 6px 12px; margin: 4px 0; background: #E6F1FB; border-radius: 0 6px 6px 0; }
-.comment-praise     { border-left: 4px solid #1D9E75; padding: 6px 12px; margin: 4px 0; background: #E1F5EE; border-radius: 0 6px 6px 0; }
-.batch-row-pass { background: #1a2e1a; border-left: 4px solid #1D9E75; border-radius: 6px; padding: 10px 14px; margin: 6px 0; }
-.batch-row-fail { background: #2e1a1a; border-left: 4px solid #E24B4A; border-radius: 6px; padding: 10px 14px; margin: 6px 0; }
+.grade-badge { display:inline-block;padding:8px 24px;border-radius:8px;font-size:48px;font-weight:bold;text-align:center;margin-bottom:12px; }
+.grade-A { background:#EAF3DE;color:#27500A; }
+.grade-B { background:#E6F1FB;color:#0C447C; }
+.grade-C { background:#FAEEDA;color:#633806; }
+.grade-D { background:#FAECE7;color:#712B13; }
+.grade-F { background:#FCEBEB;color:#791F1F; }
+.comment-error      { border-left:4px solid #E24B4A;padding:6px 12px;margin:4px 0;background:#FCEBEB;border-radius:0 6px 6px 0; }
+.comment-warning    { border-left:4px solid #EF9F27;padding:6px 12px;margin:4px 0;background:#FAEEDA;border-radius:0 6px 6px 0; }
+.comment-suggestion { border-left:4px solid #378ADD;padding:6px 12px;margin:4px 0;background:#E6F1FB;border-radius:0 6px 6px 0; }
+.comment-praise     { border-left:4px solid #1D9E75;padding:6px 12px;margin:4px 0;background:#E1F5EE;border-radius:0 6px 6px 0; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
 def get_grade(score):
     if score >= 90: return "A"
     if score >= 80: return "B"
@@ -60,18 +49,21 @@ def save_submission(title, language, code, prompt, rubric, result):
         db = SessionLocal()
         sub = Submission(
             assignment_title=title or "Untitled",
-            language=language,
-            code=code,
+            language=language, code=code,
             assignment_prompt=prompt,
             rubric_json=rubric.to_json(),
             feedback_json=json.dumps(result.raw_json),
             overall_score=result.overall_score,
         )
-        db.add(sub)
-        db.commit()
-        db.close()
+        db.add(sub); db.commit(); db.close()
     except Exception:
         pass
+
+def get_api_key():
+    try:
+        return st.secrets["GROQ_API_KEY"]
+    except Exception:
+        return os.getenv("GROQ_API_KEY", "")
 
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
@@ -83,8 +75,9 @@ with st.sidebar:
     page = st.radio("Navigate", ["📝 Review", "📦 Batch Review", "📚 History"], index=0, label_visibility="collapsed")
 
     st.divider()
-    api_key = st.text_input("Groq API Key", type="password", placeholder="gsk_...",
-                             help="Get your free key at console.groq.com")
+    default_key = get_api_key()
+    api_key = st.text_input("Groq API Key", type="password", value=default_key,
+                             placeholder="gsk_...", help="Get your free key at console.groq.com")
 
     st.divider()
     st.subheader("Rubric")
@@ -125,16 +118,13 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════════════════
 if "Review" in page and "Batch" not in page:
     st.title("📝 Review Code")
-
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
         assignment_title  = st.text_input("Assignment title", placeholder="e.g. Bubble Sort Implementation")
-        assignment_prompt = st.text_area("Assignment prompt",
-                                         placeholder="Describe what the student was asked to do...", height=120)
+        assignment_prompt = st.text_area("Assignment prompt", placeholder="Describe what the student was asked to do...", height=120)
         st.markdown("**Student Code**")
-        code = st.text_area("code", placeholder="def bubble_sort(arr):\n    ...",
-                             height=300, label_visibility="collapsed")
+        code = st.text_area("code", placeholder="def bubble_sort(arr):\n    ...", height=300, label_visibility="collapsed")
         submitted = st.button("🚀 Review Code", type="primary", use_container_width=True)
 
     with col2:
@@ -148,8 +138,7 @@ if "Review" in page and "Batch" not in page:
                 with st.spinner("Analyzing code... ~10 seconds"):
                     try:
                         reviewer = CodeReviewer(api_key=api_key)
-                        result   = reviewer.review(code=code, assignment_prompt=assignment_prompt,
-                                                   rubric=rubric, language=language)
+                        result   = reviewer.review(code=code, assignment_prompt=assignment_prompt, rubric=rubric, language=language)
                     except Exception as e:
                         st.error(f"Error: {e}"); result = None
 
@@ -201,21 +190,14 @@ if "Review" in page and "Batch" not in page:
                         file_name=f"feedback_{assignment_title or 'review'}.json",
                         mime="application/json")
 
-                    # Adaptive follow-up exercise
                     st.divider()
                     st.subheader("🎯 Adaptive Follow-up Exercise")
                     st.caption("Personalised next step based on this student's weakest area")
                     with st.spinner("Generating personalised exercise..."):
-                        followup = generate_followup(
-                            review_result=result,
-                            code=code,
-                            assignment_prompt=assignment_prompt,
-                            api_key=api_key,
-                        )
+                        followup = generate_followup(result, code, assignment_prompt, api_key)
                     if followup.success:
                         weak_score = min(result.criteria_scores, key=lambda c: c.score) if result.criteria_scores else None
-                        st.markdown(f"**Targeting weak area:** {followup.weak_criterion} "
-                                    f"({weak_score.score:.1f}/10)" if weak_score else f"**Targeting:** {followup.weak_criterion}")
+                        st.markdown(f"**Targeting weak area:** {followup.weak_criterion} ({weak_score.score:.1f}/10)" if weak_score else f"**Targeting:** {followup.weak_criterion}")
                         st.markdown(f"### {followup.exercise_title}")
                         st.info(followup.exercise)
                         with st.expander("💡 Hint"):
@@ -250,17 +232,12 @@ elif "Batch" in page:
     with st.expander("📋 CSV format guide"):
         st.markdown("Your CSV must have these columns:")
         st.code("student_name,code", language="text")
-        st.markdown("Example:")
-        st.code('''student_name,code
-Alice,"def add(a, b): return a + b"
-Bob,"def add(a,b):\n    result = a + b\n    return result"
-Charlie,"def add(x,y):\n    # adds two numbers\n    return x+y"''', language="text")
         st.download_button("⬇️ Download sample CSV",
             data='student_name,code\nAlice,"def add(a, b): return a + b"\nBob,"def add(a,b):\n    result = a + b\n    return result"\nCharlie,"def add(x,y):\n    # adds two numbers\n    return x+y"',
             file_name="sample_batch.csv", mime="text/csv")
 
     assignment_prompt_batch = st.text_area("Assignment prompt (applies to all students)",
-                                            placeholder="e.g. Write a function that adds two numbers and returns the result.",
+                                            placeholder="e.g. Write a function that adds two numbers.",
                                             height=100)
     uploaded_file = st.file_uploader("Upload student submissions CSV", type=["csv"])
 
@@ -280,25 +257,17 @@ Charlie,"def add(x,y):\n    # adds two numbers\n    return x+y"''', language="te
                     results_data = []
                     progress_bar = st.progress(0)
                     status_text  = st.empty()
-
                     reviewer = CodeReviewer(api_key=api_key)
 
                     for idx, student in enumerate(students):
                         name = student.get("student_name", f"Student {idx+1}")
                         code = student.get("code", "")
                         status_text.markdown(f"Reviewing **{name}** ({idx+1}/{len(students)})...")
-
                         try:
-                            result = reviewer.review(
-                                code=code,
-                                assignment_prompt=assignment_prompt_batch,
-                                rubric=rubric,
-                                language=language,
-                            )
+                            result = reviewer.review(code=code, assignment_prompt=assignment_prompt_batch, rubric=rubric, language=language)
                             save_submission(f"Batch - {name}", language, code, assignment_prompt_batch, rubric, result)
                             results_data.append({
-                                "student": name,
-                                "score": result.overall_score if result.success else 0,
+                                "student": name, "score": result.overall_score if result.success else 0,
                                 "grade": result.grade_letter if result.success else "F",
                                 "summary": result.summary if result.success else result.error,
                                 "strengths": result.strengths if result.success else [],
@@ -306,17 +275,11 @@ Charlie,"def add(x,y):\n    # adds two numbers\n    return x+y"''', language="te
                                 "success": result.success,
                             })
                         except Exception as e:
-                            results_data.append({
-                                "student": name, "score": 0, "grade": "F",
-                                "summary": str(e), "strengths": [], "improvements": [], "success": False,
-                            })
-
+                            results_data.append({"student": name, "score": 0, "grade": "F", "summary": str(e), "strengths": [], "improvements": [], "success": False})
                         progress_bar.progress((idx + 1) / len(students))
-                        time.sleep(1)  # rate limit buffer
+                        time.sleep(1)
 
                     status_text.markdown("✅ All submissions reviewed!")
-
-                    # Summary stats
                     scores = [r["score"] for r in results_data if r["success"]]
                     st.divider()
                     s1, s2, s3, s4 = st.columns(4)
@@ -326,9 +289,7 @@ Charlie,"def add(x,y):\n    # adds two numbers\n    return x+y"''', language="te
                     s4.metric("Lowest",  f"{min(scores):.1f}" if scores else "—")
 
                     st.divider()
-                    st.subheader("Results")
                     for r in sorted(results_data, key=lambda x: x["score"], reverse=True):
-                        row_class = "batch-row-pass" if r["score"] >= 70 else "batch-row-fail"
                         grade_emoji = {"A":"🟢","B":"🟢","C":"🟡","D":"🟠","F":"🔴"}.get(r["grade"],"⚪")
                         with st.expander(f"{grade_emoji} {r['student']} — {r['score']:.1f}/100 · Grade {r['grade']}"):
                             st.markdown(f"**Summary:** {r['summary']}")
@@ -340,18 +301,13 @@ Charlie,"def add(x,y):\n    # adds two numbers\n    return x+y"''', language="te
                                 st.markdown("**🔧 Improvements**")
                                 for i in r["improvements"]: st.markdown(f"- {i}")
 
-                    # Export full report
-                    st.divider()
                     csv_out = io.StringIO()
                     writer  = csv.writer(csv_out)
                     writer.writerow(["Student", "Score", "Grade", "Summary"])
                     for r in results_data:
                         writer.writerow([r["student"], r["score"], r["grade"], r["summary"]])
-                    st.download_button("⬇️ Download Full Report (CSV)",
-                        data=csv_out.getvalue(),
-                        file_name="batch_report.csv",
-                        mime="text/csv")
-
+                    st.download_button("⬇️ Download Full Report (CSV)", data=csv_out.getvalue(),
+                        file_name="batch_report.csv", mime="text/csv")
         except Exception as e:
             st.error(f"Error reading CSV: {e}")
     else:
@@ -365,7 +321,6 @@ Charlie,"def add(x,y):\n    # adds two numbers\n    return x+y"''', language="te
 elif "History" in page:
     st.title("📚 Submission History")
     st.caption("All past reviews saved locally")
-
     try:
         db = SessionLocal()
         submissions = db.query(Submission).order_by(Submission.submitted_at.desc()).limit(50).all()
@@ -382,7 +337,6 @@ elif "History" in page:
         s2.metric("Average Score", f"{sum(scores)/len(scores):.1f}" if scores else "—")
         s3.metric("Highest Score", f"{max(scores):.1f}" if scores else "—")
         st.divider()
-
         for sub in submissions:
             grade = get_grade(sub.overall_score or 0)
             icon  = "🟢" if (sub.overall_score or 0) >= 70 else "🔴"
@@ -395,7 +349,6 @@ elif "History" in page:
                         feedback = json.loads(sub.feedback_json)
                         st.markdown(f"**Summary:** {feedback.get('summary','')}")
                 with c2:
-                    grade_class = f"grade-{grade}"
-                    st.markdown(f'<div class="grade-badge {grade_class}" style="font-size:32px;padding:6px 18px;">{grade}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="grade-badge grade-{grade}" style="font-size:32px;padding:6px 18px;">{grade}</div>', unsafe_allow_html=True)
                     st.metric("Score", f"{sub.overall_score:.1f}/100")
                 st.code(sub.code[:500] + ("..." if len(sub.code) > 500 else ""), language=sub.language)
