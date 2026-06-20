@@ -14,12 +14,13 @@ class Submission(Base):
     __tablename__ = "submissions"
 
     id = Column(Integer, primary_key=True, index=True)
+    student_name = Column(String(200), default="Unknown")   # NEW
     assignment_title = Column(String(200))
     language = Column(String(50), default="python")
     code = Column(Text)
     assignment_prompt = Column(Text)
-    rubric_json = Column(Text)          # stored as JSON string
-    feedback_json = Column(Text)        # stored as JSON string
+    rubric_json = Column(Text)
+    feedback_json = Column(Text)
     overall_score = Column(Float)
     submitted_at = Column(DateTime, default=datetime.utcnow)
 
@@ -35,6 +36,14 @@ class Rubric(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Add student_name column if it doesn't exist (migration)
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE submissions ADD COLUMN student_name VARCHAR(200) DEFAULT 'Unknown'"))
+            conn.commit()
+    except Exception:
+        pass  # Column already exists
 
 
 def get_db():

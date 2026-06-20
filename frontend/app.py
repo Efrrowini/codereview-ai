@@ -7,6 +7,7 @@ import json
 import time
 import csv
 import io
+from collections import defaultdict
 from core.reviewer import CodeReviewer
 from core.rubric import BUILTIN_RUBRICS, Rubric, RubricCriterion
 from core.followup import generate_followup
@@ -44,10 +45,11 @@ def get_grade(score):
     if score >= 60: return "D"
     return "F"
 
-def save_submission(title, language, code, prompt, rubric, result):
+def save_submission(title, language, code, prompt, rubric, result, student_name="Unknown"):
     try:
         db = SessionLocal()
         sub = Submission(
+            student_name=student_name,
             assignment_title=title or "Untitled",
             language=language, code=code,
             assignment_prompt=prompt,
@@ -72,7 +74,7 @@ with st.sidebar:
     st.caption("AI-powered code reviewer for CS educators")
     st.divider()
 
-    page = st.radio("Navigate", ["📝 Review", "📦 Batch Review", "📚 History"], index=0, label_visibility="collapsed")
+    page = st.radio("Navigate", ["📝 Review", "📦 Batch Review", "📚 History", "📈 Progress"], index=0, label_visibility="collapsed")
 
     st.divider()
     default_key = get_api_key()
@@ -121,10 +123,11 @@ if "Review" in page and "Batch" not in page:
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
+        student_name      = st.text_input("Student name", placeholder="e.g. Alice Johnson")
         assignment_title  = st.text_input("Assignment title", placeholder="e.g. Bubble Sort Implementation")
-        assignment_prompt = st.text_area("Assignment prompt", placeholder="Describe what the student was asked to do...", height=120)
+        assignment_prompt = st.text_area("Assignment prompt", placeholder="Describe what the student was asked to do...", height=100)
         st.markdown("**Student Code**")
-        code = st.text_area("code", placeholder="def bubble_sort(arr):\n    ...", height=300, label_visibility="collapsed")
+        code = st.text_area("code", placeholder="def bubble_sort(arr):\n    ...", height=280, label_visibility="collapsed")
         submitted = st.button("🚀 Review Code", type="primary", use_container_width=True)
 
     with col2:
@@ -143,7 +146,7 @@ if "Review" in page and "Batch" not in page:
                         st.error(f"Error: {e}"); result = None
 
                 if result and result.success:
-                    save_submission(assignment_title, language, code, assignment_prompt, rubric, result)
+                    save_submission(assignment_title, language, code, assignment_prompt, rubric, result, student_name or "Unknown")
 
                     m1, m2, m3 = st.columns(3)
                     m1.metric("Overall Score", f"{result.overall_score:.1f}/100")
@@ -180,14 +183,15 @@ if "Review" in page and "Batch" not in page:
 
                     st.divider()
                     export_data = {
-                        "assignment": assignment_title, "score": result.overall_score,
-                        "grade": result.grade_letter, "summary": result.summary,
+                        "student": student_name, "assignment": assignment_title,
+                        "score": result.overall_score, "grade": result.grade_letter,
+                        "summary": result.summary,
                         "criteria": [{"name": cs.name, "score": cs.score, "feedback": cs.feedback} for cs in result.criteria_scores],
                         "strengths": result.strengths, "improvements": result.improvements,
                     }
                     st.download_button("⬇️ Export Feedback as JSON",
                         data=json.dumps(export_data, indent=2),
-                        file_name=f"feedback_{assignment_title or 'review'}.json",
+                        file_name=f"feedback_{student_name or 'student'}_{assignment_title or 'review'}.json",
                         mime="application/json")
 
                     st.divider()
@@ -237,8 +241,7 @@ elif "Batch" in page:
             file_name="sample_batch.csv", mime="text/csv")
 
     assignment_prompt_batch = st.text_area("Assignment prompt (applies to all students)",
-                                            placeholder="e.g. Write a function that adds two numbers.",
-                                            height=100)
+                                            placeholder="e.g. Write a function that adds two numbers.", height=100)
     uploaded_file = st.file_uploader("Upload student submissions CSV", type=["csv"])
 
     if uploaded_file and assignment_prompt_batch.strip():
@@ -265,7 +268,7 @@ elif "Batch" in page:
                         status_text.markdown(f"Reviewing **{name}** ({idx+1}/{len(students)})...")
                         try:
                             result = reviewer.review(code=code, assignment_prompt=assignment_prompt_batch, rubric=rubric, language=language)
-                            save_submission(f"Batch - {name}", language, code, assignment_prompt_batch, rubric, result)
+                            save_submission(f"Batch Assignment", language, code, assignment_prompt_batch, rubric, result, name)
                             results_data.append({
                                 "student": name, "score": result.overall_score if result.success else 0,
                                 "grade": result.grade_letter if result.success else "F",
@@ -340,11 +343,12 @@ elif "History" in page:
         for sub in submissions:
             grade = get_grade(sub.overall_score or 0)
             icon  = "🟢" if (sub.overall_score or 0) >= 70 else "🔴"
-            with st.expander(f"{icon} {sub.assignment_title} — {sub.overall_score:.1f}/100 · {sub.submitted_at.strftime('%d %b %Y, %H:%M')}"):
+            student_label = f"{sub.student_name} — " if sub.student_name and sub.student_name != "Unknown" else ""
+            with st.expander(f"{icon} {student_label}{sub.assignment_title} — {sub.overall_score:.1f}/100 · {sub.submitted_at.strftime('%d %b %Y, %H:%M')}"):
                 c1, c2 = st.columns([2, 1])
                 with c1:
+                    st.markdown(f"**Student:** {sub.student_name}")
                     st.markdown(f"**Language:** {sub.language}")
-                    st.markdown(f"**Prompt:** {sub.assignment_prompt[:200]}...")
                     if sub.feedback_json:
                         feedback = json.loads(sub.feedback_json)
                         st.markdown(f"**Summary:** {feedback.get('summary','')}")
@@ -352,3 +356,123 @@ elif "History" in page:
                     st.markdown(f'<div class="grade-badge grade-{grade}" style="font-size:32px;padding:6px 18px;">{grade}</div>', unsafe_allow_html=True)
                     st.metric("Score", f"{sub.overall_score:.1f}/100")
                 st.code(sub.code[:500] + ("..." if len(sub.code) > 500 else ""), language=sub.language)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: PROGRESS TRACKER
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Progress" in page:
+    st.title("📈 Student Progress Tracker")
+    st.caption("Track how individual students improve over time")
+
+    try:
+        db = SessionLocal()
+        submissions = db.query(Submission).order_by(Submission.submitted_at.asc()).all()
+        db.close()
+    except Exception as e:
+        st.error(f"Could not load data: {e}"); submissions = []
+
+    if not submissions:
+        st.info("No submissions yet. Review some code first.")
+    else:
+        # Group by student
+        student_data = defaultdict(list)
+        for sub in submissions:
+            name = sub.student_name or "Unknown"
+            if name != "Unknown":
+                student_data[name].append({
+                    "assignment": sub.assignment_title,
+                    "score": sub.overall_score or 0,
+                    "date": sub.submitted_at,
+                    "grade": get_grade(sub.overall_score or 0),
+                })
+
+        if not student_data:
+            st.info("No named student submissions yet. Add student names when reviewing to track progress.")
+        else:
+            # Class overview
+            st.subheader("🏫 Class Overview")
+            all_scores = [sub.overall_score for sub in submissions if sub.overall_score]
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Students", len(student_data))
+            c2.metric("Total Reviews", len(submissions))
+            c3.metric("Class Average", f"{sum(all_scores)/len(all_scores):.1f}" if all_scores else "—")
+
+            # Count improvements
+            improved = sum(
+                1 for subs in student_data.values()
+                if len(subs) >= 2 and subs[-1]["score"] > subs[0]["score"]
+            )
+            c4.metric("Students Improving", f"{improved}/{len(student_data)}")
+
+            st.divider()
+
+            # Individual student selector
+            st.subheader("👤 Individual Student Progress")
+            selected_student = st.selectbox("Select student", sorted(student_data.keys()))
+
+            if selected_student:
+                subs = student_data[selected_student]
+
+                if len(subs) == 1:
+                    st.info(f"{selected_student} has only 1 submission. Submit more assignments to see progress over time.")
+                    s1, s2 = st.columns(2)
+                    s1.metric("Score", f"{subs[0]['score']:.1f}/100")
+                    s2.metric("Grade", subs[0]['grade'])
+                else:
+                    first_score = subs[0]["score"]
+                    last_score  = subs[-1]["score"]
+                    delta       = last_score - first_score
+
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("First Score", f"{first_score:.1f}/100")
+                    m2.metric("Latest Score", f"{last_score:.1f}/100", delta=f"{delta:+.1f}")
+                    m3.metric("Best Score", f"{max(s['score'] for s in subs):.1f}/100")
+                    m4.metric("Assignments", len(subs))
+
+                    # Score over time chart using st.line_chart
+                    chart_data = {
+                        "Assignment": [s["assignment"] for s in subs],
+                        "Score": [s["score"] for s in subs],
+                    }
+
+                    st.markdown("**Score progression:**")
+
+                    # Build chart with target line
+                    import pandas as pd
+                    df = pd.DataFrame({
+                        "Score": [s["score"] for s in subs],
+                        "Target (70)": [70.0] * len(subs),
+                    }, index=[f"#{i+1} {s['assignment'][:20]}" for i, s in enumerate(subs)])
+
+                    st.line_chart(df, height=300)
+
+                    # Assignment breakdown
+                    st.markdown("**Assignment history:**")
+                    for i, s in enumerate(subs):
+                        grade_class = f"grade-{s['grade']}"
+                        trend = ""
+                        if i > 0:
+                            diff = s["score"] - subs[i-1]["score"]
+                            trend = f" ({'▲' if diff > 0 else '▼'} {abs(diff):.1f})"
+                        col_a, col_b, col_c = st.columns([3, 1, 1])
+                        col_a.markdown(f"**{s['assignment']}**")
+                        col_b.markdown(f"{s['score']:.1f}/100{trend}")
+                        col_c.markdown(f'<div class="grade-badge grade-{s["grade"]}" style="font-size:16px;padding:3px 10px;">{s["grade"]}</div>', unsafe_allow_html=True)
+
+            st.divider()
+
+            # Full class leaderboard
+            st.subheader("🏆 Class Leaderboard")
+            leaderboard = []
+            for name, subs in student_data.items():
+                latest = subs[-1]["score"]
+                best   = max(s["score"] for s in subs)
+                trend  = subs[-1]["score"] - subs[0]["score"] if len(subs) > 1 else 0
+                leaderboard.append({"Student": name, "Latest": latest, "Best": best, "Trend": trend, "Submissions": len(subs)})
+
+            leaderboard.sort(key=lambda x: x["Latest"], reverse=True)
+            for i, row in enumerate(leaderboard):
+                medal = ["🥇","🥈","🥉"][i] if i < 3 else f"#{i+1}"
+                trend_str = f"▲ {row['Trend']:.1f}" if row["Trend"] > 0 else (f"▼ {abs(row['Trend']):.1f}" if row["Trend"] < 0 else "—")
+                st.markdown(f"{medal} **{row['Student']}** — {row['Latest']:.1f}/100 · Best: {row['Best']:.1f} · Trend: {trend_str} · {row['Submissions']} submissions")
