@@ -74,7 +74,7 @@ with st.sidebar:
     st.caption("AI-powered code reviewer for CS educators")
     st.divider()
 
-    page = st.radio("Navigate", ["📝 Review", "📦 Batch Review", "📚 History", "📈 Progress"], index=0, label_visibility="collapsed")
+    page = st.radio("Navigate", ["📝 Review", "📦 Batch Review", "📚 History", "📈 Progress", "🏫 Dashboard"], index=0, label_visibility="collapsed")
 
     st.divider()
     default_key = get_api_key()
@@ -476,3 +476,99 @@ elif "Progress" in page:
                 medal = ["🥇","🥈","🥉"][i] if i < 3 else f"#{i+1}"
                 trend_str = f"▲ {row['Trend']:.1f}" if row["Trend"] > 0 else (f"▼ {abs(row['Trend']):.1f}" if row["Trend"] < 0 else "—")
                 st.markdown(f"{medal} **{row['Student']}** — {row['Latest']:.1f}/100 · Best: {row['Best']:.1f} · Trend: {trend_str} · {row['Submissions']} submissions")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: CLASS DASHBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Dashboard" in page:
+    st.title("🏫 Class Dashboard")
+    st.caption("Aggregated insights across all student submissions")
+
+    try:
+        db = SessionLocal()
+        submissions = db.query(Submission).order_by(Submission.submitted_at.asc()).all()
+        db.close()
+    except Exception as e:
+        st.error(f"Could not load data: {e}"); submissions = []
+
+    if not submissions:
+        st.info("No submissions yet. Review some code first.")
+    else:
+        import pandas as pd
+
+        scores = [s.overall_score for s in submissions if s.overall_score]
+        grades = [get_grade(s) for s in scores]
+
+        # Top metrics
+        st.subheader("📊 Class Summary")
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Total Submissions", len(submissions))
+        m2.metric("Class Average", f"{sum(scores)/len(scores):.1f}" if scores else "—")
+        m3.metric("Highest Score", f"{max(scores):.1f}" if scores else "—")
+        m4.metric("Lowest Score",  f"{min(scores):.1f}" if scores else "—")
+        passing = sum(1 for s in scores if s >= 70)
+        m5.metric("Pass Rate", f"{passing/len(scores)*100:.0f}%" if scores else "—")
+
+        st.divider()
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("📈 Grade Distribution")
+            grade_counts = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
+            for s in scores:
+                grade_counts[get_grade(s)] += 1
+            df_grades = pd.DataFrame({
+                "Grade": list(grade_counts.keys()),
+                "Count": list(grade_counts.values()),
+            })
+            st.bar_chart(df_grades.set_index("Grade"))
+
+        with col2:
+            st.subheader("📉 Score Distribution")
+            bins = {"0-49": 0, "50-59": 0, "60-69": 0, "70-79": 0, "80-89": 0, "90-100": 0}
+            for s in scores:
+                if s < 50: bins["0-49"] += 1
+                elif s < 60: bins["50-59"] += 1
+                elif s < 70: bins["60-69"] += 1
+                elif s < 80: bins["70-79"] += 1
+                elif s < 90: bins["80-89"] += 1
+                else: bins["90-100"] += 1
+            df_dist = pd.DataFrame({"Range": list(bins.keys()), "Students": list(bins.values())})
+            st.bar_chart(df_dist.set_index("Range"))
+
+        st.divider()
+
+        # Common weaknesses from feedback
+        st.subheader("🔍 Most Common Weaknesses")
+        weakness_counts = defaultdict(int)
+        for sub in submissions:
+            if sub.feedback_json:
+                try:
+                    feedback = json.loads(sub.feedback_json)
+                    for criterion in feedback.get("criteria_scores", []):
+                        if criterion.get("score", 10) < 7:
+                            weakness_counts[criterion["name"]] += 1
+                except Exception:
+                    pass
+
+        if weakness_counts:
+            sorted_weaknesses = sorted(weakness_counts.items(), key=lambda x: x[1], reverse=True)
+            df_weak = pd.DataFrame(sorted_weaknesses, columns=["Criterion", "Times Weak"])
+            st.bar_chart(df_weak.set_index("Criterion"))
+            st.caption("Criteria where students scored below 7/10")
+        else:
+            st.info("Not enough feedback data yet.")
+
+        st.divider()
+
+        # Score trend over time
+        st.subheader("📅 Class Score Trend Over Time")
+        if len(submissions) >= 2:
+            df_trend = pd.DataFrame({
+                "Score": [s.overall_score for s in submissions if s.overall_score],
+            }, index=[s.submitted_at.strftime("%d %b %H:%M") for s in submissions if s.overall_score])
+            st.line_chart(df_trend)
+        else:
+            st.info("Need at least 2 submissions to show trend.")
